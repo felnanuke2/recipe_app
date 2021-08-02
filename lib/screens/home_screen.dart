@@ -1,5 +1,6 @@
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:get/route_manager.dart';
 import 'package:recipe_app/controllers/home_controller.dart';
 import 'package:recipe_app/models/sponacular_recipe_model.dart';
@@ -14,15 +15,20 @@ class HomeScreen extends StatefulWidget {
   _HomeScreenState createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<SpoonacularRecipeModel> recipesList = [];
   HomeController homeController = HomeController(repository: SpoonacularRepository());
   bool isPullToRefresh = false;
-  AnimationController? loadingAnimationController;
+  late AnimationController loadingAnimationController;
+  late Animation<double> animationTween;
   ScrollController scrollController = ScrollController();
 
   @override
   void initState() {
+    loadingAnimationController =
+        AnimationController(vsync: this, duration: Duration(milliseconds: 750));
+    animationTween = Tween<double>(begin: 0, end: 86)
+        .animate(CurvedAnimation(parent: loadingAnimationController, curve: Curves.decelerate));
     _getRandomRecipeList();
 
     homeController.recipesListStream.listen((event) {
@@ -84,15 +90,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     children: [
                       Expanded(
-                        child: StreamBuilder<List<SpoonacularRecipeModel>>(
-                            stream: homeController.recipesListStream,
-                            initialData: recipesList,
-                            builder: (context, snapshot) {
-                              if (snapshot.data?.isNotEmpty ?? false) {
-                                recipesList = snapshot.data!;
-                              }
-                              if (MediaQuery.of(context).size.width < 400)
-                                return ListView(
+                        child: Container(
+                          child: StreamBuilder<List<SpoonacularRecipeModel>>(
+                              stream: homeController.recipesListStream,
+                              initialData: recipesList,
+                              builder: (context, snapshot) {
+                                if (snapshot.data?.isNotEmpty ?? false) {
+                                  recipesList = snapshot.data!;
+                                }
+                                if (MediaQuery.of(context).size.width < 400)
+                                  return ListView(
+                                    padding: EdgeInsets.all(4),
+                                    children: List.generate(snapshot.data?.length ?? 0, (index) {
+                                      var recipeModel = snapshot.data![index];
+                                      return RecipePreviewTile(
+                                        recipeItem: recipeModel,
+                                      );
+                                    }),
+                                  );
+                                return GridView.count(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 8,
+                                  childAspectRatio: 16 / 10,
                                   children: List.generate(snapshot.data?.length ?? 0, (index) {
                                     var recipeModel = snapshot.data![index];
                                     return RecipePreviewTile(
@@ -100,43 +120,37 @@ class _HomeScreenState extends State<HomeScreen> {
                                     );
                                   }),
                                 );
-                              return GridView.count(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                                childAspectRatio: 16 / 10,
-                                children: List.generate(snapshot.data?.length ?? 0, (index) {
-                                  var recipeModel = snapshot.data![index];
-                                  return RecipePreviewTile(
-                                    recipeItem: recipeModel,
-                                  );
-                                }),
-                              );
-                            }),
+                              }),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 86,
-                    bottom: 0,
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: FadeInDown(
-                        controller: onAnimationControllerAnchor,
-                        child: CircleAvatar(
-                          backgroundColor: Colors.white,
-                          child: Padding(
-                            padding: EdgeInsets.all(8),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
+                AnimatedBuilder(
+                    animation: animationTween,
+                    builder: (context, child) {
+                      return Positioned(
+                          left: 0,
+                          right: 0,
+                          top: animationTween.value,
+                          bottom: 0,
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: Container(
+                              width: animationTween.value > 30 ? 35 : animationTween.value,
+                              height: animationTween.value > 30 ? 35 : animationTween.value,
+                              child: CircleAvatar(
+                                backgroundColor: Colors.white,
+                                child: Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ),
-                    ))
+                          ));
+                    })
               ],
             ),
             onRefresh: _onRefresh),
@@ -153,12 +167,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _getRandomRecipeList() async {
     if (isPullToRefresh) {
     } else {
-      loadingAnimationController?.forward();
+      loadingAnimationController.forward();
     }
     await homeController.getRandomRecipes();
-    loadingAnimationController?.reverse();
+    loadingAnimationController.reverse();
   }
-
-  onAnimationControllerAnchor(AnimationController? controller) =>
-      this.loadingAnimationController = controller;
 }
